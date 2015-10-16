@@ -1,0 +1,496 @@
+//
+//  Calculator.swift
+//  ValueCalculator
+//
+//  Created by philis on 10/3/15.
+//  Copyright (c) 2015 philips. All rights reserved.
+//
+
+import Foundation
+class Calculator
+{
+    let K_VALID_SYMBOLS:String = "()1234567890/*+-\t "
+    let K_VALID_NUMBERS:String = "1234567890"
+    let K_OP_NOT_PARANTHESIS = NSCharacterSet(charactersInString: "/*+-")
+    let K_OPERATOR = NSCharacterSet(charactersInString: "/*+-()")
+    let K_LETTERS_CHARACTERS = NSCharacterSet.letterCharacterSet()
+    let K_DIGITS = NSCharacterSet.decimalDigitCharacterSet()
+    private var _unprocessed:NSString?
+    private var _infix:NSString?;
+    private var _postfix:NSString?;
+    
+    let K_MULTIPLY_SIGN = "*"
+    let K_OPEN_PARANTHESIS:Character = "("
+    let K_CLOSE_PARANTHESIS:Character = ")"
+    let K_SINGLE_SPACE = " "
+    let K_DOUBLE_SPACE = "  "
+    let K_NO_SPACE = ""
+    let K_ZERO_DIGIT = "0"
+    let K_NOT_AVAILABLE = "NA"
+    
+    private var opstack:Stack<String>?
+    private var postfixBuilder:String=""
+    private var parenthesis:Stack<String>?
+    private var binstack:Stack<BinaryTree>?
+    
+    init(expression:String)
+    {
+        binstack = Stack<BinaryTree>()
+        opstack = Stack<String>()
+        parenthesis = Stack<String>()
+        _unprocessed = expression
+        _infix = ""
+        _postfix = "";
+    }
+    
+    func getOriginalExpr() -> NSString?
+    {
+        return _unprocessed
+    }
+    
+    func getPostfixExpr() -> NSString?
+    {
+        return _postfix
+    }
+    func getInfixExpr() -> NSString?
+    {
+        return _infix
+    }
+    
+    // Define : Preprocess infix put additional braces if required
+    func preprocessor(unprocessedStr:String)
+    {
+        var buffer = ""
+        var unprocessedExpr:NSString = removeSingleSpaces(unprocessedStr)
+        var index = 0
+        var error:Bool = false
+        var isZeroInserted = false
+        
+        for(index=0; index<unprocessedExpr.length; index++)
+        {
+            var currentToken = Character(UnicodeScalar(unprocessedExpr.characterAtIndex(index)))
+            var nextToken:Character?
+            var lastToken:Character?
+            var lastChar = false
+            
+            if(index > 0)
+            {
+                lastToken = Character(UnicodeScalar(unprocessedExpr.characterAtIndex(index-1)))
+            }
+            
+            if(index == unprocessedExpr.length-1)
+            {
+                lastChar = true;
+            }
+            else
+            {
+                nextToken = Character(UnicodeScalar(unprocessedExpr.characterAtIndex(index+1)))
+            }
+            if(K_VALID_SYMBOLS.componentsSeparatedByString(String(currentToken))).count <= 1
+            {
+                println("Illegal Character.");
+                error = true;
+                break;
+            }
+            if(!lastChar)
+            {
+                if(isMultiplyInsertNeeded(currentToken, nextToken: nextToken!))
+                {
+                    var expressionToAppend:String = K_NO_SPACE
+                    if(isDigit(currentToken) && nextToken==K_OPEN_PARANTHESIS && isZeroInserted)
+                    {
+                        buffer = buffer + expressionToAppendClosingParaAndMultiply(currentToken, Next: nextToken)!
+                        isZeroInserted = false
+                    }
+                    else
+                    {
+                        buffer = buffer + expressionToAppendMultiply(currentToken, Next: nextToken)!
+                    }
+                    index++
+                }
+                else if(isOperatorNotParanthesis(String(currentToken)) && isOperatorNotParanthesis(String(lastToken!)))
+                {
+                    if(isDigit(nextToken!))
+                    {
+                        buffer = buffer + expressionToAppendOpenParaAndZero(currentToken, Next: nextToken)!
+                        index = index+1
+                        isZeroInserted = true
+                    }
+                }
+                else if(lastToken == K_OPEN_PARANTHESIS && isOperatorNotParanthesis(String(currentToken)))
+                {
+                    if(isDigit(nextToken!))
+                    {
+                        buffer = buffer + expressionToAppendLastTokenAndZero(lastToken, Current: currentToken, Next: nextToken)!
+                        index = index+1
+                        isZeroInserted = true
+                    }
+                }
+                else
+                {
+                    buffer = buffer + String(currentToken)
+                    if(isOperator(String(nextToken!)) && isZeroInserted)
+                    {
+                        buffer = buffer + String(K_CLOSE_PARANTHESIS)
+                        isZeroInserted = false
+                    }
+                }
+            }
+            else if(lastChar)
+            {
+                buffer = buffer + String(currentToken)
+                if(isZeroInserted)
+                {
+                    buffer = buffer + String(K_CLOSE_PARANTHESIS)
+                    isZeroInserted = false
+                }
+            }
+        }
+        if(!error)
+        {
+            _infix = buffer
+        }
+        else
+        {
+            _infix = K_NOT_AVAILABLE;
+            _postfix = K_NOT_AVAILABLE
+        }
+    }
+    
+    /**Returns the precedence of operator
+    *
+    * @param token Operator
+    * @return Number of precedence
+    */
+    private func precedence(token:String) ->Int
+    {
+        var result = 0
+        if(token == "*" || token == "/")
+        {
+            result = 2;
+        }
+        else if(token == "+" || token == "-")
+        {
+            result = 1;
+        }
+        
+        return result;
+    }
+    
+    /**Process operator
+    *
+    * @param op Operator
+    */
+    private func processOp(op:String)
+    {
+        if(opstack!.isEmpty() || op == String(K_OPEN_PARANTHESIS))
+        {
+            opstack!.push(op)
+        }
+        else
+        {
+            var topop = opstack!.top
+            if(precedence(op) > precedence(topop!))
+            {
+                opstack?.push(op)
+            }
+            else
+            {
+                while(!opstack!.isEmpty() && precedence(op) <= precedence(topop!))
+                {
+                    opstack?.pop();
+                    if(topop==String(K_OPEN_PARANTHESIS))
+                    {
+                        break;
+                    }
+                    postfixBuilder = postfixBuilder + K_SINGLE_SPACE
+                    postfixBuilder = postfixBuilder + topop!
+                    if(!opstack!.isEmpty())
+                    {
+                        topop = opstack!.top;
+                    }
+                }
+                if(op != String(K_CLOSE_PARANTHESIS))
+                {
+                    opstack!.push(op);
+                }
+            }
+        }
+    }
+    /**Checks if character is an operator
+    *
+    * @param op Character
+    * @return true if character is an operator
+    *           false otherwise
+    */
+    private func isOperator(op:String) ->Bool
+    {
+        return K_OPERATOR.isSupersetOfSet(NSCharacterSet(charactersInString: op))
+    }
+    
+    private func isOperatorNotParanthesis(op:String) ->Bool
+    {
+        return K_OP_NOT_PARANTHESIS.isSupersetOfSet(NSCharacterSet(charactersInString: op))
+    }
+    
+    /**
+    * Converts infix to postfix
+    */
+    func infixToPostfix()
+    {
+        var error = false;
+        
+        if(_infix != K_NOT_AVAILABLE)
+        {
+            var loopCount = 0
+            for(loopCount=0; loopCount<_infix!.length; loopCount++)
+            {
+                let currentToken = Character(UnicodeScalar(_infix!.characterAtIndex(loopCount)))
+                
+                if(currentToken == K_OPEN_PARANTHESIS)
+                {
+                    parenthesis!.push(String(currentToken));
+                }
+                if(currentToken == K_CLOSE_PARANTHESIS)
+                {
+                    parenthesis!.pop()
+                }
+            
+                if(isDigit(currentToken))
+                {
+                    postfixBuilder = postfixBuilder + String(currentToken)
+                }
+                else if(isOperator(String(currentToken)))
+                {
+                    processOp(String(currentToken))
+                    postfixBuilder = postfixBuilder + K_SINGLE_SPACE
+                }
+                
+            }
+            if(!(parenthesis!.isEmpty()))
+            {
+                println("Unbalanced parenthesis.");
+                _postfix = K_NOT_AVAILABLE;
+                error = true;
+            }
+            if(!error)
+            {
+                while(!(opstack!.isEmpty()))
+                {
+                    let op = opstack!.pop()
+                    if(op == String(K_OPEN_PARANTHESIS))
+                    {
+                        
+                    }
+                    postfixBuilder = postfixBuilder + K_SINGLE_SPACE
+                    postfixBuilder = postfixBuilder + op!
+                }
+                postfixBuilder = trimSpaces(postfixBuilder) as String
+                _postfix = replaceAllDoubleWithSingleSpaces(postfixBuilder)
+            }
+            
+        }
+    }
+    /**Returns a binary tree of the expression
+    *
+    * @return
+    */
+    func buildExpressionTree() ->BinaryTree?
+    {
+        if(_postfix != K_NOT_AVAILABLE)
+        {
+            var elements:Array<NSString> = _postfix!.componentsSeparatedByString(K_SINGLE_SPACE) as! Array<NSString>
+
+            for currentElement in elements
+            {
+                var currentToken = currentElement
+                currentToken = removeSingleSpaces(currentToken)
+                let characterAt0Index = Character(UnicodeScalar(currentToken.characterAtIndex(0)))
+                
+                if(currentToken == "")
+                {
+                    
+                }
+                else if(isDigit(characterAt0Index))
+                {
+                    let element:BinaryTree = BinaryTree(data: currentToken , leftTree: nil, rightTree: nil)
+                    binstack!.push(element);
+                }
+                else
+                {
+                    let right:BinaryTree = binstack!.pop()!
+                    let left:BinaryTree = binstack!.pop()!
+                    let element:BinaryTree = BinaryTree(data: currentToken , leftTree: left, rightTree: right);
+                    binstack!.push(element)
+                }
+            }
+            return binstack!.pop()
+            
+        }
+        else
+        {
+            return nil
+        }
+    }
+    
+    /**Evaluates expression tree
+    *
+    * @param eTree a binary tree
+    * @return result
+    */
+    func evalExpressionTree(eTree:BinaryTree?) ->Double?
+    {
+        var result:Double?
+        if(eTree == nil)
+        {
+            result = 0.0
+        }
+        else if(eTree!.isLeaf())
+        {
+            if let doubleValue = NSNumberFormatter().numberFromString(eTree!.rootNode!.data as String)
+            {
+                result = Double(doubleValue)
+            }
+        }
+        else
+        {
+            let op:String = String(Character(UnicodeScalar(eTree!.rootNode!.data.characterAtIndex(0))))
+            
+            let left:Double = evalExpressionTree(eTree!.getLeftSubtree())!;
+            let right:Double = evalExpressionTree(eTree!.getRightSubtree())!;
+            
+            
+            result = evaluate(op, leftOperand: left, rightOperand: right)
+        }
+        return result
+    }
+    
+    /**Evaluates two numbers and returns result
+    *
+    * @param op operator
+    * @param left number
+    * @param right number
+    * @return result
+    */
+    private func evaluate(op:String, leftOperand:Double , rightOperand:Double) -> Double
+    {
+        var result:Double = 0.0
+        
+        switch(op)
+        {
+        case "+" :
+            result = leftOperand+rightOperand
+        case "-" :
+            result = leftOperand-rightOperand
+        case "*" :
+            result = leftOperand*rightOperand
+        case "/" :
+            result = leftOperand/rightOperand
+        default:
+            result = 0.0
+        }
+        return result;
+    }
+   
+    //MARK: FORMULA parsing
+    
+    func parseFieldFormula(var formula:String) -> Array<String>
+    {
+        var buffer = ""
+        var formulaFields:Array<String> = Array<String>()
+        var index = 0
+        var currentToken = ""
+        formula = removeSingleSpaces(formula as NSString) as String
+        for character in formula
+        {
+            if isOperator(String(character))
+            {
+                if(!(buffer.isEmpty || (buffer.toInt() != nil)))
+                {
+                formulaFields.append(buffer)
+                }
+                buffer = ""
+            }
+            else
+            {
+                buffer = buffer + String(character)
+            }
+        }
+        return formulaFields
+    }
+    
+    //MARK: Utility functions
+    
+    private func isMultiplyInsertNeeded(currentToken:Character,nextToken:Character) ->Bool
+    {
+        var result = false
+        let isTokenDigit = isDigit(currentToken)
+        let isNextTokenDigit = isDigit(nextToken)
+        if((isTokenDigit && nextToken==K_OPEN_PARANTHESIS)
+            || (currentToken==K_CLOSE_PARANTHESIS && isNextTokenDigit)
+            || (currentToken==K_CLOSE_PARANTHESIS) && (nextToken==K_OPEN_PARANTHESIS)
+            || (currentToken==K_CLOSE_PARANTHESIS && nextToken=="^"))
+        {
+            result = true
+        }
+        return result
+    }
+    
+    private func expressionToAppendOpenParaAndZero(currentToken:Character, Next nextToken:Character?) ->String?
+    {
+        //
+        let expressionToAppend = String(K_OPEN_PARANTHESIS) + K_ZERO_DIGIT
+        let moreToAppend = expressionToAppend + String(currentToken) + String(nextToken!)
+        return moreToAppend
+    }
+    
+    private func expressionToAppendLastTokenAndZero(lastToken : Character?,Current currentToken:Character, Next nextToken:Character?) ->String?
+    {
+        let expressionToAppend = String(lastToken!) + K_ZERO_DIGIT
+        let moreToAppend = expressionToAppend + String(currentToken) + String(nextToken!)
+        return moreToAppend
+    }
+    
+    private func expressionToAppendMultiply(currentToken:Character, Next nextToken:Character?)  ->String?
+    {
+        //
+        let expressionToAppend = String(currentToken) + K_MULTIPLY_SIGN + String(nextToken!)
+        return expressionToAppend
+    }
+    
+    private func expressionToAppendClosingParaAndMultiply(currentToken:Character, Next nextToken:Character?)  ->String?
+    {
+        //
+        let expressionToAppend = String(currentToken) + String(K_CLOSE_PARANTHESIS) + K_MULTIPLY_SIGN + String(nextToken!)
+        return expressionToAppend
+    }
+    
+    private func isDigit(token:Character) ->Bool
+    {
+        let isTokenDigit = K_DIGITS.isSupersetOfSet(NSCharacterSet(charactersInString: String(token)))
+        return isTokenDigit
+    }
+    
+    private func replaceAllDoubleWithSingleSpaces(fromString:NSString) ->NSString
+    {
+        var changedString:NSString = fromString.stringByReplacingOccurrencesOfString( K_DOUBLE_SPACE, withString: K_SINGLE_SPACE)
+        if(changedString.componentsSeparatedByString(K_DOUBLE_SPACE).count>1)
+        {
+            changedString = replaceAllDoubleWithSingleSpaces(changedString)
+        }
+        let toString = changedString
+        return toString
+    }
+    
+    private func trimSpaces(fromString:NSString) ->NSString
+    {
+        let toString = fromString.stringByTrimmingCharactersInSet(NSCharacterSet(charactersInString: K_SINGLE_SPACE))
+        return toString
+    }
+    
+    private func removeSingleSpaces(fromString:NSString) ->NSString
+    {
+        let toString = fromString.stringByReplacingOccurrencesOfString(K_SINGLE_SPACE, withString: K_NO_SPACE, options: NSStringCompareOptions.LiteralSearch, range: NSMakeRange(0, fromString.length))
+        return toString
+    }
+}
