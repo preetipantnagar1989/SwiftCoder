@@ -1,0 +1,156 @@
+//
+//  BinaryTree.swift
+
+import Foundation
+class TreeNode
+{
+    var data: NSString
+    var left: TreeNode?
+    var right: TreeNode?
+    init(value: NSString) {
+        self.data = value
+    }
+    convenience init(value: NSString, left: TreeNode?, right: TreeNode?) {
+        self.init(value: value)
+        self.left = left
+        self.right = right
+    }
+}
+
+class BinaryTree
+{
+    var rootNode:TreeNode?
+    
+    init(treeNode:TreeNode)
+    {
+        rootNode = treeNode
+    }
+    
+    /** Constructs a new binary tree with data in its root,leftTree
+    as its left subtree and rightTree as its right subtree.
+    */
+    init(data:NSString, leftTree:BinaryTree?, rightTree:BinaryTree?)
+    {
+        rootNode = TreeNode(value: data)
+        if (leftTree != nil)
+        {
+            rootNode!.left = leftTree!.rootNode;
+        }
+        else
+        {
+            rootNode!.left = nil;
+        }
+        if (rightTree != nil)
+        {
+            rootNode!.right = rightTree!.rootNode;
+        }
+        else
+        {
+            rootNode!.right = nil;
+        }
+    }
+    
+    /** Return the left subtree.
+    @return The left subtree or nil if either the root or
+    the left subtree is nil
+    */
+    func getLeftSubtree() ->BinaryTree?
+    {
+        if (rootNode != nil && rootNode!.left != nil)
+        {
+            return BinaryTree(treeNode: rootNode!.left!);
+        }
+        else
+        {
+            return nil;
+        }
+    }
+    
+    /** Return the right sub-tree
+    @return the right sub-tree or
+    null if either the root or the
+    right subtree is null.
+    */
+    func getRightSubtree() ->BinaryTree?
+    {
+        if (rootNode != nil && rootNode!.right != nil)
+        {
+            return BinaryTree(treeNode: rootNode!.right!);
+        }
+        else
+        {
+            return nil;
+        }
+    }
+    
+    func iterativeInorderTraversal(root: TreeNode?) -> [String] {
+        if root == nil {
+            return []
+        }
+        var result: [String] = []
+        var stack: [TreeNode] = []
+        var visitedNodes: NSMutableSet = NSMutableSet()
+        var currNode: TreeNode! = root
+        while currNode != nil {
+            if currNode.left != nil && !visitedNodes.containsObject(currNode.left!) {
+                stack.append(currNode)
+                currNode = currNode.left!
+                continue
+            }
+            if !visitedNodes.containsObject(currNode) {
+                result.append(currNode.data as String)
+                visitedNodes.addObject(currNode)
+            }
+            if currNode.right != nil && !visitedNodes.containsObject(currNode.right!) {
+                stack.append(currNode)
+                currNode = currNode.right!
+                continue
+            }
+            currNode = stack.count > 0 ? stack.removeLast() : nil
+        }
+        return result
+    }
+    
+    /** Perform a preorder traversal.
+    @param node The local root
+    @param depth The depth
+    @param sb The string buffer to save the output
+    */
+    private func preOrderTraverse(node:TreeNode?, depth:Int, var bufferString:String) {
+        for (var index = 1; index < depth; index++)
+        {
+            bufferString = bufferString + "  "
+        }
+        
+        if (node == nil)
+        {
+            bufferString = bufferString + "null\n";
+        }
+        else
+        {
+            bufferString = bufferString + (node!.data as String)
+            bufferString = bufferString + "\n"
+            preOrderTraverse(node!.left, depth: depth + 1, bufferString: bufferString);
+            preOrderTraverse(node!.right, depth: depth + 1, bufferString: bufferString);
+        }
+    }
+    
+    func isLeaf() ->Bool
+    {
+        return (rootNode?.left == nil && rootNode?.right == nil)
+    }
+    
+    class func readBinaryTree(data:String?) -> BinaryTree?
+    {
+        if(data != nil)
+        {
+            let leftTree = readBinaryTree(data);
+            let rightTree = readBinaryTree(data);
+            return BinaryTree(data: data!, leftTree: leftTree, rightTree: rightTree);
+        }
+        else
+        {
+            return nil
+        }
+    }
+}
